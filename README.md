@@ -9,6 +9,7 @@ This is a WORK IN PROGRESS. Use at your own risk.
 ```$ genload <nr-of-calls> <url>```
 
 `nr-of-call` total number of calls to make to the service listening at `<url>`
+
 `url` the url to call
 
 ## Example
