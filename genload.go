@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"sync"
 )
 
 func showUsageAndQuit() {
@@ -40,9 +39,11 @@ func parseArgs() (totalCallsToMake int, maxCallsInParallel int, url string) {
 	return
 }
 
-type callCounter struct {
-	callCount int
-	mutex     sync.Mutex
+type callResponse struct {
+	threadNr        int
+	resp            *http.Response
+	err             error
+	continueChannel chan bool
 }
 
 func main() {
@@ -50,6 +51,9 @@ func main() {
 
 	if maxCallsInParallel == 0 {
 		maxCallsInParallel = 1
+	}
+	if maxCallsInParallel > totalCallsToMake && totalCallsToMake != 0 {
+		maxCallsInParallel = totalCallsToMake
 	}
 
 	if totalCallsToMake == 0 {
@@ -60,35 +64,51 @@ func main() {
 			url, maxCallsInParallel, totalCallsToMake)
 	}
 
-	counter := callCounter{}
+	reportBackChannel := make(chan callResponse)
 
-	callsMade := make(chan int)
-
-	for i := 0; i < maxCallsInParallel; i++ {
-		go makeCalls(i, url, &counter, callsMade)
+	for threadNr := 0; threadNr < maxCallsInParallel; threadNr++ {
+		continueChannel := make(chan bool)
+		go makeCall(threadNr, url, reportBackChannel, continueChannel)
 	}
 
+	callCounter := maxCallsInParallel
+	runningThreads := maxCallsInParallel
+	counter := 1
+
 	for {
-		calls := <-callsMade
-		if calls >= totalCallsToMake && totalCallsToMake != 0 {
-			fmt.Println("All done!")
+		callReport := <-reportBackChannel
+
+		if callCounter < totalCallsToMake || totalCallsToMake == 0 {
+			callCounter++
+			callReport.continueChannel <- true
+		} else {
+			callReport.continueChannel <- false
+			runningThreads--
+		}
+
+		if callReport.err != nil {
+			fmt.Printf("%5d: [%3d]: ERROR: %v\n", counter, callReport.threadNr, callReport.err)
+		} else {
+			fmt.Printf("%5d: [%3d]: %s\n", counter, callReport.threadNr, callReport.resp.Status)
+		}
+		counter++
+
+		if runningThreads == 0 {
 			return
 		}
 	}
 }
 
-func makeCalls(i int, url string, counter *callCounter, callsMade chan int) {
+func makeCall(threadNr int, url string, reportBackChannel chan callResponse, continueChannel chan bool) {
 	for {
 		resp, err := http.Get(url)
-		if err != nil {
-			fmt.Printf("%d: ERROR: %v\n", i, err)
-		} else {
-			fmt.Printf("%3d: %s\n", i, resp.Status)
-		}
+		callResp := callResponse{threadNr, resp, err, continueChannel}
 
-		counter.mutex.Lock()
-		counter.callCount++
-		callsMade <- counter.callCount
-		counter.mutex.Unlock()
+		reportBackChannel <- callResp
+
+		startNextCall := <-continueChannel
+		if !startNextCall {
+			return
+		}
 	}
 }
