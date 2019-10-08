@@ -6,39 +6,89 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 )
 
+func showUsageAndQuit() {
+	log.Fatal("Usage: genload <total-calls> <max-parallel-calls> <url>")
+}
+
+func parseArgs() (totalCallsToMake int, maxCallsInParallel int, url string) {
+	var err error
+
+	switch len(os.Args) {
+	case 3:
+		totalCallsToMake, err = strconv.Atoi(os.Args[1])
+		if err != nil {
+			showUsageAndQuit()
+		}
+		maxCallsInParallel = 0
+		url = os.Args[2]
+	case 4:
+		totalCallsToMake, err = strconv.Atoi(os.Args[1])
+		if err != nil {
+			showUsageAndQuit()
+		}
+		maxCallsInParallel, err = strconv.Atoi(os.Args[2])
+		if err != nil {
+			showUsageAndQuit()
+		}
+		url = os.Args[3]
+	default:
+		showUsageAndQuit()
+	}
+	return
+}
+
+type callCounter struct {
+	callCount int
+	mutex     sync.Mutex
+}
+
 func main() {
-	args := os.Args[1:]
-	times, err := strconv.Atoi(args[0])
-	url := args[1]
+	totalCallsToMake, maxCallsInParallel, url := parseArgs()
 
-	if err != nil {
-		log.Fatal("Usage: genload <times-to-call> <url>")
+	if maxCallsInParallel == 0 {
+		maxCallsInParallel = 1
 	}
 
-	if times == 0 {
-		fmt.Printf("Calling url [%s] until stopped...\n", url)
+	if totalCallsToMake == 0 {
+		fmt.Printf("Calling url [%s] with [%d] calls simultaneous, until stopped with CTRL+C...\n",
+			url, maxCallsInParallel)
 	} else {
-		fmt.Printf("Calling url [%s] [%d] times...\n", url, times)
+		fmt.Printf("Calling url [%s] with [%d] calls simultaneous, for a total of [%d] calls...\n",
+			url, maxCallsInParallel, totalCallsToMake)
 	}
 
-	ch := make(chan int, times)
+	counter := callCounter{}
 
-	for i := 0; i < times; i++ {
-		go func(i int) {
-			resp, err := http.Get(url)
-			if err != nil {
-				fmt.Printf("%d: ERROR: %v\n", i, err)
-			} else {
-				fmt.Printf("%3d: %s\n", i, resp.Status)
-			}
+	callsMade := make(chan int)
 
-			ch <- i
-		}(i)
+	for i := 0; i < maxCallsInParallel; i++ {
+		go makeCalls(i, url, &counter, callsMade)
 	}
 
-	for i := 0; i < times; i++ {
-		<-ch
+	for {
+		calls := <-callsMade
+		if calls >= totalCallsToMake && totalCallsToMake != 0 {
+			fmt.Println("All done!")
+			return
+		}
+	}
+}
+
+func makeCalls(i int, url string, counter *callCounter, callsMade chan int) {
+	for {
+		resp, err := http.Get(url)
+		if err != nil {
+			fmt.Printf("%d: ERROR: %v\n", i, err)
+		} else {
+			fmt.Printf("%3d: %s\n", i, resp.Status)
+		}
+
+		counter.mutex.Lock()
+		counter.callCount++
+		callsMade <- counter.callCount
+		counter.mutex.Unlock()
 	}
 }
