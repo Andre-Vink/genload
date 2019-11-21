@@ -66,9 +66,16 @@ func main() {
 
 	reportBackChannel := make(chan callResponse)
 
+	tr := &http.Transport{
+		DisableKeepAlives: false,
+	}
+	client := &http.Client{
+		Transport: tr,
+	}
+
 	for threadNr := 0; threadNr < maxCallsInParallel; threadNr++ {
 		continueChannel := make(chan bool)
-		go makeCall(threadNr, url, reportBackChannel, continueChannel)
+		go makeCall(threadNr, client, url, reportBackChannel, continueChannel)
 	}
 
 	callCounter := maxCallsInParallel
@@ -99,9 +106,12 @@ func main() {
 	}
 }
 
-func makeCall(threadNr int, url string, reportBackChannel chan callResponse, continueChannel chan bool) {
+func makeCall(threadNr int, client *http.Client, url string, reportBackChannel chan callResponse, continueChannel chan bool) {
 	for {
-		resp, err := http.Get(url)
+		resp, err := client.Get(url)
+		if err == nil {
+			_ = resp.Body.Close()
+		}
 		callResp := callResponse{threadNr, resp, err, continueChannel}
 
 		reportBackChannel <- callResp
