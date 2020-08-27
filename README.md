@@ -19,9 +19,8 @@ If not specified `1` is used as value, meaning no concurrency.
 
 `url` the url to call
 
-The tool shall call the `url` for a total of `<nr-of-total-calls>` but with a maximum of `<nr-of-calls-in-parallel>` calls simultaneous. Until the total number of calls is reached, a new call is spawned if the number of parallel calls is not reached.
-
-The output will show the call number, the returned HTTP status code or the returned error.
+The output will show the call number, thread nr
+and either the returned HTTP status code or the returned error.
 
 ## Example
 
