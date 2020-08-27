@@ -2,42 +2,8 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
-	"os"
-	"strconv"
 )
-
-func showUsageAndQuit() {
-	log.Fatal("Usage: genload <total-calls> <max-parallel-calls> <url>")
-}
-
-func parseArgs() (totalCallsToMake int, maxCallsInParallel int, url string) {
-	var err error
-
-	switch len(os.Args) {
-	case 3:
-		totalCallsToMake, err = strconv.Atoi(os.Args[1])
-		if err != nil {
-			showUsageAndQuit()
-		}
-		maxCallsInParallel = 0
-		url = os.Args[2]
-	case 4:
-		totalCallsToMake, err = strconv.Atoi(os.Args[1])
-		if err != nil {
-			showUsageAndQuit()
-		}
-		maxCallsInParallel, err = strconv.Atoi(os.Args[2])
-		if err != nil {
-			showUsageAndQuit()
-		}
-		url = os.Args[3]
-	default:
-		showUsageAndQuit()
-	}
-	return
-}
 
 type callResponse struct {
 	threadNr        int
@@ -47,14 +13,8 @@ type callResponse struct {
 }
 
 func main() {
-	totalCallsToMake, maxCallsInParallel, url := parseArgs()
 
-	if maxCallsInParallel == 0 {
-		maxCallsInParallel = 1
-	}
-	if maxCallsInParallel > totalCallsToMake && totalCallsToMake != 0 {
-		maxCallsInParallel = totalCallsToMake
-	}
+	totalCallsToMake, maxCallsInParallel, url := parseArgs()
 
 	if totalCallsToMake == 0 {
 		fmt.Printf("Calling url [%s] with [%d] calls simultaneous, until stopped with CTRL+C...\n",
@@ -64,14 +24,14 @@ func main() {
 			url, maxCallsInParallel, totalCallsToMake)
 	}
 
-	reportBackChannel := make(chan callResponse)
-
 	tr := &http.Transport{
-		DisableKeepAlives: false,
+		DisableKeepAlives:      true,
 	}
 	client := &http.Client{
 		Transport: tr,
 	}
+
+	reportBackChannel := make(chan callResponse)
 
 	for threadNr := 0; threadNr < maxCallsInParallel; threadNr++ {
 		continueChannel := make(chan bool)
@@ -109,7 +69,7 @@ func main() {
 func makeCall(threadNr int, client *http.Client, url string, reportBackChannel chan callResponse, continueChannel chan bool) {
 	for {
 		resp, err := client.Get(url)
-		if err == nil {
+		if resp != nil {
 			_ = resp.Body.Close()
 		}
 		callResp := callResponse{threadNr, resp, err, continueChannel}
