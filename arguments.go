@@ -20,7 +20,7 @@ func parseArgs() (totalCallsToMake int, maxCallsInParallel int, url string) {
 		if err != nil {
 			showUsageAndQuit()
 		}
-		maxCallsInParallel = 0
+		maxCallsInParallel = 1
 		url = os.Args[2]
 	case 4:
 		totalCallsToMake, err = strconv.Atoi(os.Args[1])
