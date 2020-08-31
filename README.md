@@ -19,7 +19,8 @@ If not specified `1` is used as value, meaning no concurrency.
 
 `url` the url to call
 
-The output will show the call number, thread nr
+The output will show the call number, thread nr,
+elapsed time in milliseconds
 and either the returned HTTP status code or the returned error.
 
 ## Example

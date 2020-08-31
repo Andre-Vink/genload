@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"time"
 )
 
 type callResponse struct {
@@ -10,6 +11,12 @@ type callResponse struct {
 	resp            *http.Response
 	err             error
 	continueChannel chan bool
+	elapsedTime     time.Duration
+}
+
+func (cr *callResponse) ElapsedTimeInMillis() float32 {
+
+	return float32(cr.elapsedTime.Microseconds()) / 1000
 }
 
 func main() {
@@ -26,6 +33,7 @@ func main() {
 
 	tr := &http.Transport{
 		DisableKeepAlives:      true,
+		ForceAttemptHTTP2: true,
 	}
 	client := &http.Client{
 		Transport: tr,
@@ -54,9 +62,11 @@ func main() {
 		}
 
 		if callReport.err != nil {
-			fmt.Printf("%5d: [%3d]: ERROR: %v\n", counter, callReport.threadNr, callReport.err)
+			fmt.Printf("%5d: [%3d]: <%5.1f>: ERROR: %v\n",
+				counter, callReport.threadNr, callReport.ElapsedTimeInMillis(), callReport.err)
 		} else {
-			fmt.Printf("%5d: [%3d]: %s\n", counter, callReport.threadNr, callReport.resp.Status)
+			fmt.Printf("%5d: [%3d]: <%5.1f>:  %s\n",
+				counter, callReport.threadNr, callReport.ElapsedTimeInMillis(), callReport.resp.Status)
 		}
 		counter++
 
@@ -68,11 +78,15 @@ func main() {
 
 func makeCall(threadNr int, client *http.Client, url string, reportBackChannel chan callResponse, continueChannel chan bool) {
 	for {
+		startTime := time.Now()
 		resp, err := client.Get(url)
 		if resp != nil {
 			_ = resp.Body.Close()
 		}
-		callResp := callResponse{threadNr, resp, err, continueChannel}
+		endTime := time.Now()
+		elapsedTime := endTime.Sub(startTime)
+
+		callResp := callResponse{threadNr, resp, err, continueChannel, elapsedTime}
 
 		reportBackChannel <- callResp
 
